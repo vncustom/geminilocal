@@ -8,6 +8,11 @@ from datetime import datetime
 import threading
 import queue
 import concurrent.futures # Thêm thư viện để xử lý timeout
+# --- Thư viện cho export PDF/Word ---
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.units import inch
 
 # --- Hằng số mới ---
 FALLBACK_MODEL = "gemini-2.5-flash-lite"
@@ -29,9 +34,124 @@ class GeminiInterface:
         self.queue = queue.Queue()
         self.api_key = None  # Initialize API key as None
 
+        self.create_menu_export() # Thêm menu Export phía trên cùng
         self.create_main_frame()
         self.create_widgets()
         self.setup_periodic_queue_check()
+    def create_menu_export(self):
+        menubar = tk.Menu(self.root)
+        export_menu = tk.Menu(menubar, tearoff=0)
+        export_menu.add_command(label="Export to PDF", command=self.export_to_pdf)
+        export_menu.add_command(label="Export to Word", command=self.export_to_word)
+        menubar.add_cascade(label="Export", menu=export_menu)
+        self.root.config(menu=menubar)
+
+    def export_to_pdf(self):
+        try:
+            # Lấy nội dung file kết quả mới nhất
+            results_dir = os.path.join(os.path.expanduser("~"), "Downloads", "gemini_results")
+            if not os.path.exists(results_dir):
+                messagebox.showwarning("Không có dữ liệu", "Thư mục 'gemini_results' không tồn tại.")
+                return
+            files = [f for f in os.listdir(results_dir) if f.startswith("gemini_result_") and f.endswith(".txt")]
+            if not files:
+                messagebox.showwarning("Không có dữ liệu", "Không tìm thấy file kết quả nào trong thư mục 'gemini_results'.")
+                return
+            files.sort(reverse=True)
+            latest_file = files[0]
+            latest_file_path = os.path.join(results_dir, latest_file)
+            with open(latest_file_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+            if not content:
+                messagebox.showwarning("Không có dữ liệu", "File kết quả rỗng.")
+                return
+            # Chọn nơi lưu file PDF
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".pdf",
+                filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
+                initialdir=os.path.expanduser("~")
+            )
+            if not file_path:
+                return
+            # Tạo PDF
+            doc = SimpleDocTemplate(file_path, pagesize=letter)
+            styles = getSampleStyleSheet()
+            # Tạo style tùy chỉnh cho tiêu đề
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=16,
+                textColor='black',
+                spaceAfter=12,
+                alignment=1  # Center alignment
+            )
+            # Tạo style cho nội dung
+            body_style = ParagraphStyle(
+                'CustomBody',
+                parent=styles['BodyText'],
+                fontSize=11,
+                leading=14,
+                spaceAfter=6
+            )
+            # Xây dựng danh sách các phần tử cho PDF
+            elements = []
+            elements.append(Paragraph("Gemini Processing Results", title_style))
+            elements.append(Spacer(1, 0.3*inch))
+            # Thêm nội dung
+            for line in content.split('\n'):
+                if line.strip():
+                    elements.append(Paragraph(line, body_style))
+                else:
+                    elements.append(Spacer(1, 0.1*inch))
+            # Xây dựng PDF
+            doc.build(elements)
+            messagebox.showinfo("Thành công", f"Đã export sang PDF:\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Lỗi", f"Lỗi khi export sang PDF: {str(e)}")
+
+    def export_to_word(self):
+        try:
+            from docx import Document
+        except ImportError:
+            messagebox.showerror("Thiếu thư viện", "Vui lòng cài đặt python-docx: pip install python-docx")
+            return
+        # Lấy nội dung file kết quả mới nhất
+        results_dir = os.path.join(os.path.expanduser("~"), "Downloads", "gemini_results")
+        if not os.path.exists(results_dir):
+            messagebox.showwarning("Không có dữ liệu", "Thư mục 'gemini_results' không tồn tại.")
+            return
+        files = [f for f in os.listdir(results_dir) if f.startswith("gemini_result_") and f.endswith(".txt")]
+        if not files:
+            messagebox.showwarning("Không có dữ liệu", "Không tìm thấy file kết quả nào trong thư mục 'gemini_results'.")
+            return
+        files.sort(reverse=True)
+        latest_file = files[0]
+        latest_file_path = os.path.join(results_dir, latest_file)
+        try:
+            with open(latest_file_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+        except Exception as e:
+            messagebox.showerror("Lỗi đọc file", f"Không thể đọc file kết quả: {str(e)}")
+            return
+        if not content:
+            messagebox.showwarning("Không có dữ liệu", "File kết quả rỗng.")
+            return
+        # Chọn nơi lưu file Word
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".docx",
+            filetypes=[("Word files", "*.docx")],
+            title="Chọn nơi lưu file Word"
+        )
+        if not file_path:
+            return
+        try:
+            doc = Document()
+            for line in content.splitlines():
+                doc.add_paragraph(line)
+            doc.save(file_path)
+            messagebox.showinfo("Thành công", f"Đã xuất ra Word: {file_path}")
+        except Exception as e:
+            messagebox.showerror("Lỗi xuất Word", str(e))
 
     def create_main_frame(self):
         self.main_canvas = tk.Canvas(self.root)
