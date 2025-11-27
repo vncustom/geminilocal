@@ -105,7 +105,7 @@ PROVIDER_CONFIG = {
 class GeminiInterface:
     def __init__(self, root):
         self.root = root
-        self.root.title("Gemini Pro v5 API Interface (with Retry)") # Cập nhật title
+        self.root.title("Gemini Pro v6 API Interface (with Retry)") # Cập nhật title
         self.root.geometry("800x900")
 
         self.root.option_add('*Font', ('Arial', 12))
@@ -271,63 +271,62 @@ class GeminiInterface:
         main_container = ttk.Frame(self.scrollable_frame, padding="10")
         main_container.pack(fill="both", expand=True)
 
-        # Language & provider selection
+        # Language & provider selection (row layout, fixed width)
         lang_frame = ttk.LabelFrame(main_container, text="Chọn ngôn ngữ / Provider", padding="5")
         lang_frame.pack(fill="x", pady=5)
         lang_provider_frame = ttk.Frame(lang_frame)
         lang_provider_frame.pack(fill="x")
         self.language = ttk.Combobox(lang_provider_frame, values=["中文", "ENG", "Việt Nam"],
-                                   font=('Arial', 12), state="readonly")
+                                   font=('Arial', 12), state="readonly", width=10)
         self.language.set("中文")
-        self.language.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.language.pack(side="left", padx=(0, 5))
         self.language.bind("<<ComboboxSelected>>", self.on_language_change)
         self.provider_combo = ttk.Combobox(
             lang_provider_frame,
             textvariable=self.provider_var,
             values=list(PROVIDER_CONFIG.keys()),
             font=('Arial', 12),
-            state="readonly"
+            state="readonly",
+            width=12
         )
-        self.provider_combo.pack(side="left", fill="x", expand=True)
+        self.provider_combo.pack(side="left", padx=(0, 5))
         self.provider_combo.bind("<<ComboboxSelected>>", self.on_provider_change)
 
-        # Model selection
-        model_frame = ttk.LabelFrame(main_container, text="Chọn model chính", padding="5") # Sửa label
+        # Model selection (row layout, fixed width)
+        model_frame = ttk.LabelFrame(main_container, text="Chọn model chính", padding="5")
         model_frame.pack(fill="x", pady=5)
-        self.model = ttk.Combobox(model_frame, values=[], font=('Arial', 12), state="readonly")
+        model_row = ttk.Frame(model_frame)
+        model_row.pack(fill="x")
+        self.model = ttk.Combobox(model_row, values=[], font=('Arial', 12), state="readonly", width=22)
         self.update_model_options(self.provider_var.get())
-        self.model.pack(fill="x")
+        self.model.pack(side="left", padx=(0, 5))
 
-        # API Key Frame
+        # API Key Frame (row layout, fixed width)
         api_frame = ttk.LabelFrame(main_container, text="API Key", padding="5")
         api_frame.pack(fill="x", pady=5)
+        api_row = ttk.Frame(api_frame)
+        api_row.pack(fill="x")
+        self.api_key_label = ttk.Label(api_row, text="Chưa có API Key nào được chọn", font=('Arial', 12), width=32, anchor="w")
+        self.api_key_label.pack(side="left", padx=(0, 5))
+        self.browse_api_key_button = ttk.Button(api_row, text="Chọn File API Key", command=self.browse_api_key_file, width=18)
+        self.browse_api_key_button.pack(side="left")
 
-        self.api_key_label = ttk.Label(api_frame, text="Chưa có API Key nào được chọn", font=('Arial', 12))
-        self.api_key_label.pack(fill="x")
-
-        self.browse_api_key_button = ttk.Button(api_frame, text="Chọn File API Key", command=self.browse_api_key_file)
-        self.browse_api_key_button.pack(fill="x", pady=5)
-
-        # Split method
-        split_frame = ttk.LabelFrame(main_container,
-                                   text="Phương thức chia văn bản",
-                                   padding="5")
-        split_frame.pack(fill="x", pady=5)
+        # Split method & length (row layout, fixed width)
+        split_row = ttk.Frame(main_container)
+        split_row.pack(fill="x", pady=5)
+        split_frame = ttk.LabelFrame(split_row, text="Phương thức chia văn bản", padding="5")
+        split_frame.pack(side="left", padx=(0, 5))
         self.split_method = ttk.Combobox(split_frame,
-                                       values=["Theo chương (第X章/Chương X)",
-                                              "Theo số ký tự"],
-                                       font=('Arial', 12))
+                    values=["Theo chương (第X章/Chương X)", "Theo số ký tự"],
+                    font=('Arial', 12), width=20, state="readonly")
         self.split_method.set("Theo chương (第X章/Chương X)")
-        self.split_method.pack(fill="x")
+        self.split_method.pack()
 
-        # Split length input
-        split_length_frame = ttk.Frame(main_container)
-        split_length_frame.pack(fill="x", pady=5)
-        self.split_length_label = ttk.Label(split_length_frame, text="Số ký tự/số từ mỗi phần:")
-        self.split_length_label.pack(side=tk.LEFT)
-        self.split_length_entry = ttk.Entry(split_length_frame, font=('Arial', 12))
-        self.split_length_entry.pack(side=tk.LEFT, fill="x", expand=True)
-        self.split_length_entry.insert(0, "10000") # Tăng giá trị mặc định nếu muốn
+        split_length_frame = ttk.LabelFrame(split_row, text="Số ký tự/số từ mỗi phần", padding="5")
+        split_length_frame.pack(side="left")
+        self.split_length_entry = ttk.Entry(split_length_frame, font=('Arial', 12), width=10)
+        self.split_length_entry.pack()
+        self.split_length_entry.insert(0, "10000")
 
         # Progress bar
         self.progress_bar = ttk.Progressbar(main_container, orient="horizontal",
@@ -391,7 +390,7 @@ class GeminiInterface:
         if context:
             prompt_parts.append(f"\nBối cảnh chương trước: {context}")
         prompt_parts.append("\nNội dung cần dịch:\n" + chapter_text)
-        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 100 từ, không dùng Markdown.\nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
+        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 300 từ, không dùng Markdown.\nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
         return "\n".join(prompt_parts)
 
     def extract_translation_and_summary(self, response_text):
