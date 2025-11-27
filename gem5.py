@@ -721,6 +721,8 @@ class GeminiInterface:
             total_parts = len(chapters)
             prev_summary = self.prev_summary_text.get("1.0", tk.END).strip()
 
+            # Lưu bản dịch tổng hợp không có tóm tắt
+            translations_only = []
             for i, chapter in enumerate(chapters, 1):
                 if self.should_stop:
                     status_messages.append(f"Phần {i}/{total_parts}: Đã dừng bởi người dùng.")
@@ -766,12 +768,13 @@ class GeminiInterface:
 
                 # Tách bản dịch và tóm tắt
                 translation, summary = self.extract_translation_and_summary(response_text)
+                translations_only.append(translation)
                 self.queue.put((self.result_text, f"Kết quả xử lý phần {i}:\n{translation}\n\n---TÓM TẮT---\n{summary}", True))
                 status_messages.append(f"Phần {i}/{total_parts}: Hoàn thành.")
                 # Ghi kết quả vào file
                 try:
                     with open(result_file, 'a', encoding='utf-8') as f:
-                        f.write(f"## PHẦN {i} ##\n")
+                        f.write(f"##")
                         f.write(translation + "\n\n")
                         f.write(f"## TÓM TẮT PHẦN {i} ##\n")
                         f.write(summary + "\n\n")
@@ -784,6 +787,16 @@ class GeminiInterface:
                 prev_summary = summary
                 self.prev_summary_text.delete("1.0", tk.END)
                 self.prev_summary_text.insert("1.0", summary)
+
+            # Sau khi hoàn thành, lưu file tổng hợp chỉ bản dịch
+            result_file_no_summary = result_file.replace('.txt', '_no_summary.txt')
+            try:
+                with open(result_file_no_summary, 'w', encoding='utf-8') as f:
+                    for idx, translation in enumerate(translations_only, 1):
+                        f.write(f"## PHẦN {idx} ##\n")
+                        f.write(translation + "\n\n")
+            except Exception as write_err:
+                print(f"Không thể ghi file tổng hợp không tóm tắt: {write_err}")
 
             final_status = "\n".join(status_messages)
             if not self.should_stop:
