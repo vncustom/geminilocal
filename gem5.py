@@ -390,7 +390,7 @@ class GeminiInterface:
         if context:
             prompt_parts.append(f"\nBối cảnh chương trước: {context}")
         prompt_parts.append("\nNội dung cần dịch:\n" + chapter_text)
-        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 300 từ, không dùng Markdown.\nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
+        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 300 từ, giữ nguyên xưng hô trong văn bản, không dùng Markdown.\nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
         return "\n".join(prompt_parts)
 
     def extract_translation_and_summary(self, response_text):
@@ -774,7 +774,7 @@ class GeminiInterface:
                 # Ghi kết quả vào file
                 try:
                     with open(result_file, 'a', encoding='utf-8') as f:
-                        f.write(f"##")
+                        f.write(f"## ")
                         f.write(translation + "\n\n")
                         f.write(f"## TÓM TẮT PHẦN {i} ##\n")
                         f.write(summary + "\n\n")
@@ -793,7 +793,7 @@ class GeminiInterface:
             try:
                 with open(result_file_no_summary, 'w', encoding='utf-8') as f:
                     for idx, translation in enumerate(translations_only, 1):
-                        f.write(f"## PHẦN {idx} ##\n")
+                        f.write(f"## ")
                         f.write(translation + "\n\n")
             except Exception as write_err:
                 print(f"Không thể ghi file tổng hợp không tóm tắt: {write_err}")
