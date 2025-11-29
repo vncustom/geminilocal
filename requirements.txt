@@ -1,0 +1,6 @@
+# Required libraries for the project
+reportlab==3.6.12
+python-docx==0.8.11
+# Google Generative AI client used in `gem5.py` (imported as `google.generativeai`)
+google-generative-ai
+openai>=1.30.0
