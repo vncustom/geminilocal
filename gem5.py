@@ -390,7 +390,7 @@ class GeminiInterface:
         if context:
             prompt_parts.append(f"\nBối cảnh chương trước: {context}")
         prompt_parts.append("\nNội dung cần dịch:\n" + chapter_text)
-        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 300 từ, giữ nguyên xưng hô trong văn bản, không dùng Markdown.\nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
+        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 350 từ, giữ nguyên toàn bộ xưng hô và đại từ nhân xưng được sử dụng trong văn bản (ví dụ: ‘cô ấy’, ‘hắn’, ‘y’, ‘ta’, ‘ngươi’…). Không được thay đổi hay chuyển đổi cách xưng hô.\nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
         return "\n".join(prompt_parts)
 
     def extract_translation_and_summary(self, response_text):
@@ -700,8 +700,8 @@ class GeminiInterface:
             split_length = self.split_length_entry.get()
             if split_method == "Theo chương (第X章/Chương X)":
                 chapters = self.split_text(text)
-            else:
-                chapters = self.smart_split_by_words(text, int(split_length))
+            else:  # "Theo số ký tự"
+                chapters = self.split_text(text)
             if not chapters:
                 self.show_error("Không thể chia văn bản thành các phần.")
                 self.processing = False
@@ -892,32 +892,37 @@ class GeminiInterface:
                     start = 0
                     text_len = len(text)
                     while start < text_len:
-                        end = start + split_length
+                        end = min(start + split_length, text_len)  # Không vượt quá độ dài văn bản
+                        
                         # Cố gắng tìm dấu ngắt câu gần nhất lùi về trước để không cắt giữa câu
                         if end < text_len:
-                            # Tìm dấu chấm, hỏi, than, xuống dòng gần nhất trong khoảng 100 ký tự cuối
-                            split_pos = -1
+                            split_pos = end  # Mặc định cắt tại vị trí end
+                            
+                            # Tìm dấu chấm, hỏi, than, xuống dòng, dấu chưa, dấu phẩy gần nhất trong khoảng
                             search_start = max(start, end - 100)
-                            possible_splits = [m.start() for m in re.finditer(r'[.!?\n\r]+', text[search_start:end])]
+                            possible_splits = [m.end() for m in re.finditer(r'[。!?！？\n\r，,；;]', text[search_start:end])]
                             if possible_splits:
-                                split_pos = search_start + max(possible_splits) + 1 # Vị trí ngay sau dấu ngắt
-                            elif '\n' in text[start:end]:
-                                split_pos = text.rfind('\n', start, end) + 1 # Tìm xuống dòng gần nhất
+                                # Lấy vị trí ngay sau dấu ngắt gần nhất
+                                split_pos = search_start + max(possible_splits)
                             else:
-                                # Nếu không có dấu ngắt câu/dòng, tìm khoảng trắng gần nhất
+                                # Nếu không có dấu ngắt câu, tìm khoảng trắng gần nhất
                                 space_pos = text.rfind(' ', start, end)
-                                if space_pos != -1:
+                                if space_pos > start:  # Đảm bảo tìm được và vị trí hợp lệ
                                     split_pos = space_pos + 1
-                                else:
-                                     split_pos = end # Cắt cứng nếu không tìm được chỗ phù hợp
-
-                            if split_pos > start : # Đảm bảo có tiến triển
+                                # Nếu không tìm được gì, giữ nguyên end (cắt cứng)
+                            
+                            if split_pos > start:  # Đảm bảo có tiến triển
                                 end = split_pos
 
                         chunk = text[start:end].strip()
-                        if chunk: # Chỉ thêm nếu chunk không rỗng
+                        if chunk:  # Chỉ thêm nếu chunk không rỗng
                             result.append(chunk)
-                        start = end
+                        
+                        # Đảm bảo tiến triển: nếu end == start, tăng thêm 1 để tránh vòng lặp vô hạn
+                        if end <= start:
+                            start += 1
+                        else:
+                            start = end
 
                     if not result:
                         self.show_error("Không thể chia văn bản theo số ký tự (kết quả rỗng).")
