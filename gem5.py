@@ -898,9 +898,9 @@ class GeminiInterface:
                         if end < text_len:
                             split_pos = end  # Mặc định cắt tại vị trí end
                             
-                            # Tìm dấu chấm, hỏi, than, xuống dòng, dấu chưa, dấu phẩy gần nhất trong khoảng
+                            # Tìm dấu chấm, hỏi, than, xuống dòng gần nhất trong khoảng
                             search_start = max(start, end - 100)
-                            possible_splits = [m.end() for m in re.finditer(r'[。!?！？\n\r，,；;]', text[search_start:end])]
+                            possible_splits = [m.end() for m in re.finditer(r'[。!?！？\n\r]', text[search_start:end])]
                             if possible_splits:
                                 # Lấy vị trí ngay sau dấu ngắt gần nhất
                                 split_pos = search_start + max(possible_splits)
