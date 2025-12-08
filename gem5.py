@@ -140,7 +140,9 @@ class GeminiInterface:
         self.processing = False
         self.should_stop = False
         self.queue = queue.Queue()
-        self.api_key = None  # Initialize API key as None
+        self.api_key = None  # Single API key (legacy)
+        self.api_keys = []   # List of API keys for round robin
+        self.api_key_index = 0  # Current index for round robin
         self.provider_var = tk.StringVar(value=DEFAULT_PROVIDER)
 
         self.create_menu_export() # Thêm menu Export phía trên cùng
@@ -493,23 +495,25 @@ class GeminiInterface:
         )
         if file_path:
             try:
+                keys = []
                 with open(file_path, 'r') as f:
-                    # Đọc tất cả các dòng và tìm dòng không trống đầu tiên
-                    key_found = False
                     for line in f:
                         stripped_line = line.strip()
-                        if stripped_line and not stripped_line.startswith('#'): # Bỏ qua dòng trống và comment
-                            self.api_key = stripped_line
-                            key_found = True
-                            break
-                if not key_found:
+                        if stripped_line and not stripped_line.startswith('#'):
+                            keys.append(stripped_line)
+                if not keys:
                     self.api_key_label.config(text="File API Key không chứa key hợp lệ")
                     self.api_key = None
+                    self.api_keys = []
                 else:
-                    self.api_key_label.config(text=f"Đã tải API Key từ: {os.path.basename(file_path)}")
+                    self.api_key = keys[0]
+                    self.api_keys = keys
+                    self.api_key_index = 0
+                    self.api_key_label.config(text=f"Đã tải {len(keys)} API Key từ: {os.path.basename(file_path)}")
             except Exception as e:
                 self.api_key_label.config(text=f"Lỗi đọc file API Key: {str(e)}")
                 self.api_key = None
+                self.api_keys = []
 
     def validate_inputs(self):
         errors = []
@@ -693,8 +697,12 @@ class GeminiInterface:
                 self.root.after(0, lambda: self.stop_button.configure(state='disabled'))
                 return
             openai_client = None
+            # Round robin API key setup
+            api_keys = self.api_keys if self.api_keys else ([self.api_key] if self.api_key else [])
+            api_key_count = len(api_keys)
+            api_key_index = self.api_key_index if api_key_count > 0 else 0
             if provider == "Google":
-                genai.configure(api_key=self.api_key)
+                genai.configure(api_key=api_keys[api_key_index] if api_key_count > 0 else None)
             elif provider in ["MegaLLM", "Open Router", "POE"]:
                 try:
                     base_url = provider_config.get("base_url")
@@ -703,7 +711,7 @@ class GeminiInterface:
                     default_headers = provider_config.get("headers")
                     openai_client = OpenAI(
                         base_url=base_url,
-                        api_key=self.api_key,
+                        api_key=api_keys[api_key_index] if api_key_count > 0 else None,
                         default_headers=default_headers
                     )
                 except Exception as client_error:
@@ -746,7 +754,6 @@ class GeminiInterface:
             total_parts = len(chapters)
             prev_summary = self.prev_summary_text.get("1.0", tk.END).strip()
 
-            # Lưu bản dịch tổng hợp không có tóm tắt
             translations_only = []
             for i, chapter in enumerate(chapters, 1):
                 if self.should_stop:
@@ -755,13 +762,42 @@ class GeminiInterface:
                                     f"Xử lý đã bị dừng ở phần {i}.\n" + "\n".join(status_messages) + f"\nKết quả chưa hoàn chỉnh lưu tại: {result_file}", True))
                     break
 
+                # Round robin API key selection
+                if api_key_count > 0:
+                    current_key = api_keys[api_key_index]
+                    self.api_key_index = (api_key_index + 1) % api_key_count
+                else:
+                    current_key = None
+
+                # Update client/key for each call
+                if provider == "Google":
+                    genai.configure(api_key=current_key)
+                elif provider in ["MegaLLM", "Open Router", "POE"]:
+                    try:
+                        base_url = provider_config.get("base_url")
+                        if not base_url and provider == "MegaLLM":
+                            base_url = MEGALLM_BASE_URL
+                        default_headers = provider_config.get("headers")
+                        openai_client = OpenAI(
+                            base_url=base_url,
+                            api_key=current_key,
+                            default_headers=default_headers
+                        )
+                    except Exception as client_error:
+                        self.show_error(f"Không thể khởi tạo {provider} client: {client_error}")
+                        self.processing = False
+                        self.root.after(0, lambda: self.submit_button.configure(state='normal'))
+                        self.root.after(0, lambda: self.stop_button.configure(state='disabled'))
+                        return
+
                 # Xây dựng prompt cho từng chương
                 prompt_content = self.build_translation_prompt(chapter, prev_summary)
 
-                # Hiển thị full prompt gửi API để debug
+                # Hiển thị full prompt gửi API để debug, kèm thông tin key
                 self.queue.put((self.progress_text,
                     f"Đang xử lý phần {i}/{total_parts}\n"
                     f"Model chính: {primary_model_name}\n"
+                    f"Đang dùng API KEY thứ {api_key_index+1}/{api_key_count}\n"
                     f"Prompt gửi API:\n{'='*20}\n{prompt_content}\n{'='*20}", True))
                 self.queue.put((self.result_text, f"--- Đang chờ kết quả phần {i} ---", True))
 
@@ -812,6 +848,9 @@ class GeminiInterface:
                 prev_summary = summary
                 self.prev_summary_text.delete("1.0", tk.END)
                 self.prev_summary_text.insert("1.0", summary)
+
+                # Advance round robin index for next call
+                api_key_index = self.api_key_index
 
             # Sau khi hoàn thành, lưu file tổng hợp chỉ bản dịch
             result_file_no_summary = result_file.replace('.txt', '_no_summary.txt')
