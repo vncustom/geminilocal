@@ -1,16 +1,20 @@
-# geminilocal
+# GeminiLocal
 
-Một tiện ích GUI nhỏ giúp gọi các mô hình Gemini và các provider AI khác (Google, MegaLLM, Open Router), xử lý văn bản dài bằng cách chia nhỏ, gọi API cho từng phần với cơ chế retry, timeout, và lưu kết quả hợp nhất ra ổ đĩa.
+Một tiện ích GUI nhỏ giúp gọi các mô hình Gemini và các provider AI khác (Google, MegaLLM, Open Router, POE), xử lý văn bản dài bằng cách chia nhỏ, gọi API cho từng phần với cơ chế retry, timeout, và lưu kết quả hợp nhất ra ổ đĩa.
 
-## Tính năng mới
+## Tính năng
 
-- **Hỗ trợ nhiều provider:** Chọn Google, MegaLLM hoặc Open Router để gọi các mô hình AI khác nhau.
-- **Chọn model:** Dropdown cho phép chọn model phù hợp với provider.
+- **Hỗ trợ nhiều provider:** Google, MegaLLM, Open Router, POE.
+- **Chọn model:** Dropdown cho phép chọn model phù hợp với từng provider.
+- **Quản lý API Key:** Hỗ trợ chọn file chứa nhiều API key (round robin).
 - **Xuất kết quả ra PDF/Word:** Menu "Export" cho phép lưu kết quả xử lý thành file PDF hoặc Word.
 - **Chia văn bản:** Chia theo chương (regex) hoặc theo số ký tự/số từ, có hỗ trợ tiếng Anh, Trung, Việt.
 - **Xử lý song song:** Quá trình xử lý chạy ở background thread, UI luôn phản hồi.
 - **Retry & Timeout:** Nếu model chính lỗi hoặc timeout, tự động thử lại với model dự phòng (fallback).
 - **Lưu kết quả:** Kết quả từng phần và toàn bộ được lưu vào `~/Downloads/gemini_results/`.
+- **Tải kết quả mới nhất:** Nút "Tải kết quả mới nhất" để xem lại file kết quả gần nhất.
+- **Hiển thị tiến trình:** Có progress bar, trạng thái từng phần, và log chi tiết.
+- **Tùy chỉnh prompt và bối cảnh:** Cho phép nhập prompt và tóm tắt chương trước cho từng phần.
 
 ## Sử dụng
 
@@ -20,11 +24,11 @@ Một tiện ích GUI nhỏ giúp gọi các mô hình Gemini và các provider 
    ```
 
 2. **Chọn provider và model:**  
-   - Provider: Google, MegaLLM, Open Router.
+   - Provider: Google, MegaLLM, Open Router, POE.
    - Model: Chọn từ danh sách tương ứng.
 
 3. **Tải API Key:**  
-   - Nhấn "Chọn File API Key", chọn file chứa API key (dòng đầu tiên không trống, không phải comment).
+   - Nhấn "Chọn File API Key", chọn file chứa API key (mỗi dòng 1 key, bỏ qua dòng trống/comment).
 
 4. **Chọn phương thức chia văn bản:**  
    - "Theo chương (第X章/Chương X)" hoặc "Theo số ký tự".
@@ -53,8 +57,9 @@ Một tiện ích GUI nhỏ giúp gọi các mô hình Gemini và các provider 
 ## Troubleshooting
 
 - Nếu gặp lỗi khi export Word, cài thêm `python-docx`.
-- Nếu provider MegaLLM hoặc Open Router không hoạt động, kiểm tra API key và base_url.
+- Nếu provider MegaLLM, Open Router hoặc POE không hoạt động, kiểm tra API key và base_url.
 - Nếu không chia được văn bản, kiểm tra lại định dạng hoặc tăng số ký tự/số từ mỗi phần.
+- Nếu gặp lỗi khi gọi API, thử đổi model hoặc kiểm tra lại API key.
 
 ## Đóng góp & mở rộng
 
@@ -63,4 +68,4 @@ Một tiện ích GUI nhỏ giúp gọi các mô hình Gemini và các provider 
 
 ---
 
-_Last updated: October 25, 2025_
+_Last updated: June 2024_
