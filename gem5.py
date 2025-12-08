@@ -15,12 +15,14 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import inch
 
+
 # --- Hằng số mới ---
 GOOGLE_FALLBACK_MODEL = "gemini-2.5-flash-lite"
 API_TIMEOUT_SECONDS = 7 * 60 # 7 phút
 DEFAULT_PROVIDER = "Google"
 MEGALLM_BASE_URL = "https://ai.megallm.io/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+POE_BASE_URL = "https://api.poe.com/v1"
 OPENROUTER_HEADERS = {
     "HTTP-Referer": "https://localhost",
     "X-Title": "GeminiLocal"
@@ -77,10 +79,28 @@ OPENROUTER_MODELS = [
     "google/gemini-2.0-flash-exp:free",
     "meta-llama/llama-3.3-70b-instruct:free"
 ]
+# POE models
+POE_MODELS = [
+    "gemini-2.5-pro",
+    "Gemini-2.5-Flash",
+    "Gemini-2.5-Flash-Lite",
+    "Gemini-3-Pro",
+    "Grok-4",
+    "Claude-Opus-4.1",
+    "Claude-Haiku-4.5",
+    "Claude-Opus-4.5",
+    "Claude-Sonnet-4",
+    "GPT-5.1",
+    "GPT-5",
+    "Deepseek-R1",
+    "Deepseek-V3.2",
+    "Deepseek-V3.2-Exp"
+]
 PROVIDER_DEFAULT_MODELS = {
     "Google": "gemini-flash-latest",
     "MegaLLM": "gpt-5.1",
-    "Open Router": "deepseek/deepseek-chat-v3.1:free"
+    "Open Router": "deepseek/deepseek-chat-v3.1:free",
+    "POE": "gemini-2.5-pro"
 }
 PROVIDER_CONFIG = {
     "Google": {
@@ -98,6 +118,11 @@ PROVIDER_CONFIG = {
         "fallback_model": "tngtech/deepseek-r1t2-chimera:free",
         "base_url": OPENROUTER_BASE_URL,
         "headers": OPENROUTER_HEADERS
+    },
+    "POE": {
+        "models": POE_MODELS,
+        "fallback_model": "Gemini-2.5-Flash-Lite",
+        "base_url": POE_BASE_URL
     }
 }
 # --- Kết thúc hằng số mới ---
@@ -549,7 +574,7 @@ class GeminiInterface:
                 if not response or not response.text:
                     return None, f"Không nhận được nội dung hợp lệ từ model {model_name}"
                 return response.text, None
-            elif provider in ["MegaLLM", "Open Router"]:
+            elif provider in ["MegaLLM", "Open Router", "POE"]:
                 if openai_client is None:
                     return None, f"{provider} client chưa được khởi tạo."
                 response = openai_client.chat.completions.create(
@@ -670,7 +695,7 @@ class GeminiInterface:
             openai_client = None
             if provider == "Google":
                 genai.configure(api_key=self.api_key)
-            elif provider in ["MegaLLM", "Open Router"]:
+            elif provider in ["MegaLLM", "Open Router", "POE"]:
                 try:
                     base_url = provider_config.get("base_url")
                     if not base_url and provider == "MegaLLM":
