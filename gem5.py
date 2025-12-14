@@ -745,7 +745,7 @@ class GeminiInterface:
             results_dir = os.path.join(os.path.expanduser("~"), "Downloads", "gemini_results")
             os.makedirs(results_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-            result_file = os.path.join(results_dir, f"gemini_result_{timestamp}_{primary_model_name.replace('/', '-')}.txt")
+            result_file = os.path.join(results_dir, f"gemini_result_{timestamp}_{primary_model_name.replace('/', '-').replace(':', '_')}.txt")
 
             self.progress_bar["maximum"] = len(chapters)
             self.progress_bar["value"] = 0
