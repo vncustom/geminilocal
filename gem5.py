@@ -417,7 +417,7 @@ class GeminiInterface:
         if context:
             prompt_parts.append(f"\nBối cảnh chương trước: {context}")
         prompt_parts.append("\nNội dung cần dịch:\n" + chapter_text)
-        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 350 từ, giữ nguyên toàn bộ xưng hô và đại từ nhân xưng được sử dụng trong văn bản (ví dụ: ‘cô ấy’, ‘hắn’, ‘y’, ‘ta’, ‘ngươi’…). Không được thay đổi hay chuyển đổi cách xưng hô.\nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
+        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 350 từ, giữ nguyên đại từ nhân xưng được sử dụng trong văn bản dịch. Tuyệt đối không ghép đại từ trước tên riêng (ví dụ: chỉ viết 'Yến Dịch', không được viết 'anh Yến Dịch') Giữ đúng đại từ khi dẫn truyện. \nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
         return "\n".join(prompt_parts)
 
     def extract_translation_and_summary(self, response_text):
