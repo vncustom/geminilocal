@@ -15,12 +15,15 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import inch
 
+
 # --- Hằng số mới ---
 GOOGLE_FALLBACK_MODEL = "gemini-2.5-flash-lite"
 API_TIMEOUT_SECONDS = 7 * 60 # 7 phút
 DEFAULT_PROVIDER = "Google"
 MEGALLM_BASE_URL = "https://ai.megallm.io/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+POE_BASE_URL = "https://api.poe.com/v1"
+MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
 OPENROUTER_HEADERS = {
     "HTTP-Referer": "https://localhost",
     "X-Title": "GeminiLocal"
@@ -28,12 +31,10 @@ OPENROUTER_HEADERS = {
 GOOGLE_MODELS = [
     "gemini-2.0-flash-lite-preview-02-05",
     "gemini-2.5-pro-preview-05-06",
-    "gemini-2.0-flash",
+    "gemini-3-flash-preview",
     "gemini-2.5-pro-exp-03-25",
     "gemini-2.0-flash",
     "gemini-2.5-pro",
-    "gemini-2.5-flash-preview-04-17",
-    "gemini-2.5-flash-preview-05-20",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
     "gemini-2.0-flash-lite",
@@ -77,10 +78,36 @@ OPENROUTER_MODELS = [
     "google/gemini-2.0-flash-exp:free",
     "meta-llama/llama-3.3-70b-instruct:free"
 ]
+# POE models
+POE_MODELS = [
+    "gemini-2.5-pro",
+    "Gemini-2.5-Flash",
+    "Gemini-2.5-Flash-Lite",
+    "Gemini-3-Pro",
+    "Grok-4",
+    "Claude-Opus-4.1",
+    "Claude-Haiku-4.5",
+    "Claude-Opus-4.5",
+    "Claude-Sonnet-4",
+    "GPT-5.1",
+    "GPT-5",
+    "Deepseek-R1",
+    "Deepseek-V3.2",
+    "Deepseek-V3.2-Exp"
+]
+MISTRAL_MODELS = [
+    "mistral-medium-latest",
+    "mistral-small-latest",
+    "mistral-large-latest",
+    "mistral-large-2512",
+    "mistral-small-2409"
+]
 PROVIDER_DEFAULT_MODELS = {
     "Google": "gemini-flash-latest",
     "MegaLLM": "gpt-5.1",
-    "Open Router": "deepseek/deepseek-chat-v3.1:free"
+    "Open Router": "deepseek/deepseek-chat-v3.1:free",
+    "POE": "gemini-2.5-pro",
+    "Mistral": "mistral-small-2409"
 }
 PROVIDER_CONFIG = {
     "Google": {
@@ -98,6 +125,16 @@ PROVIDER_CONFIG = {
         "fallback_model": "tngtech/deepseek-r1t2-chimera:free",
         "base_url": OPENROUTER_BASE_URL,
         "headers": OPENROUTER_HEADERS
+    },
+    "POE": {
+        "models": POE_MODELS,
+        "fallback_model": "Gemini-2.5-Flash-Lite",
+        "base_url": POE_BASE_URL
+    },
+    "Mistral": {
+        "models": MISTRAL_MODELS,
+        "fallback_model": None,
+        "base_url": MISTRAL_BASE_URL
     }
 }
 # --- Kết thúc hằng số mới ---
@@ -115,7 +152,9 @@ class GeminiInterface:
         self.processing = False
         self.should_stop = False
         self.queue = queue.Queue()
-        self.api_key = None  # Initialize API key as None
+        self.api_key = None  # Single API key (legacy)
+        self.api_keys = []   # List of API keys for round robin
+        self.api_key_index = 0  # Current index for round robin
         self.provider_var = tk.StringVar(value=DEFAULT_PROVIDER)
 
         self.create_menu_export() # Thêm menu Export phía trên cùng
@@ -390,7 +429,7 @@ class GeminiInterface:
         if context:
             prompt_parts.append(f"\nBối cảnh chương trước: {context}")
         prompt_parts.append("\nNội dung cần dịch:\n" + chapter_text)
-        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 350 từ, giữ nguyên toàn bộ xưng hô và đại từ nhân xưng được sử dụng trong văn bản (ví dụ: ‘cô ấy’, ‘hắn’, ‘y’, ‘ta’, ‘ngươi’…). Không được thay đổi hay chuyển đổi cách xưng hô.\nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
+        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 350 từ, giữ nguyên đại từ nhân xưng được sử dụng trong văn bản dịch. Tuyệt đối không ghép đại từ trước tên riêng (ví dụ: chỉ viết 'Yến Dịch', không được viết 'anh Yến Dịch') Giữ đúng đại từ khi dẫn truyện. \nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
         return "\n".join(prompt_parts)
 
     def extract_translation_and_summary(self, response_text):
@@ -468,23 +507,25 @@ class GeminiInterface:
         )
         if file_path:
             try:
+                keys = []
                 with open(file_path, 'r') as f:
-                    # Đọc tất cả các dòng và tìm dòng không trống đầu tiên
-                    key_found = False
                     for line in f:
                         stripped_line = line.strip()
-                        if stripped_line and not stripped_line.startswith('#'): # Bỏ qua dòng trống và comment
-                            self.api_key = stripped_line
-                            key_found = True
-                            break
-                if not key_found:
+                        if stripped_line and not stripped_line.startswith('#'):
+                            keys.append(stripped_line)
+                if not keys:
                     self.api_key_label.config(text="File API Key không chứa key hợp lệ")
                     self.api_key = None
+                    self.api_keys = []
                 else:
-                    self.api_key_label.config(text=f"Đã tải API Key từ: {os.path.basename(file_path)}")
+                    self.api_key = keys[0]
+                    self.api_keys = keys
+                    self.api_key_index = 0
+                    self.api_key_label.config(text=f"Đã tải {len(keys)} API Key từ: {os.path.basename(file_path)}")
             except Exception as e:
                 self.api_key_label.config(text=f"Lỗi đọc file API Key: {str(e)}")
                 self.api_key = None
+                self.api_keys = []
 
     def validate_inputs(self):
         errors = []
@@ -549,7 +590,7 @@ class GeminiInterface:
                 if not response or not response.text:
                     return None, f"Không nhận được nội dung hợp lệ từ model {model_name}"
                 return response.text, None
-            elif provider in ["MegaLLM", "Open Router"]:
+            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral"]:
                 if openai_client is None:
                     return None, f"{provider} client chưa được khởi tạo."
                 response = openai_client.chat.completions.create(
@@ -668,9 +709,13 @@ class GeminiInterface:
                 self.root.after(0, lambda: self.stop_button.configure(state='disabled'))
                 return
             openai_client = None
+            # Round robin API key setup
+            api_keys = self.api_keys if self.api_keys else ([self.api_key] if self.api_key else [])
+            api_key_count = len(api_keys)
+            api_key_index = self.api_key_index if api_key_count > 0 else 0
             if provider == "Google":
-                genai.configure(api_key=self.api_key)
-            elif provider in ["MegaLLM", "Open Router"]:
+                genai.configure(api_key=api_keys[api_key_index] if api_key_count > 0 else None)
+            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral"]:
                 try:
                     base_url = provider_config.get("base_url")
                     if not base_url and provider == "MegaLLM":
@@ -678,7 +723,7 @@ class GeminiInterface:
                     default_headers = provider_config.get("headers")
                     openai_client = OpenAI(
                         base_url=base_url,
-                        api_key=self.api_key,
+                        api_key=api_keys[api_key_index] if api_key_count > 0 else None,
                         default_headers=default_headers
                     )
                 except Exception as client_error:
@@ -712,7 +757,7 @@ class GeminiInterface:
             results_dir = os.path.join(os.path.expanduser("~"), "Downloads", "gemini_results")
             os.makedirs(results_dir, exist_ok=True)
             timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-            result_file = os.path.join(results_dir, f"gemini_result_{timestamp}_{primary_model_name.replace('/', '-')}.txt")
+            result_file = os.path.join(results_dir, f"gemini_result_{timestamp}_{primary_model_name.replace('/', '-').replace(':', '_')}.txt")
 
             self.progress_bar["maximum"] = len(chapters)
             self.progress_bar["value"] = 0
@@ -721,7 +766,6 @@ class GeminiInterface:
             total_parts = len(chapters)
             prev_summary = self.prev_summary_text.get("1.0", tk.END).strip()
 
-            # Lưu bản dịch tổng hợp không có tóm tắt
             translations_only = []
             for i, chapter in enumerate(chapters, 1):
                 if self.should_stop:
@@ -730,13 +774,42 @@ class GeminiInterface:
                                     f"Xử lý đã bị dừng ở phần {i}.\n" + "\n".join(status_messages) + f"\nKết quả chưa hoàn chỉnh lưu tại: {result_file}", True))
                     break
 
+                # Round robin API key selection
+                if api_key_count > 0:
+                    current_key = api_keys[api_key_index]
+                    self.api_key_index = (api_key_index + 1) % api_key_count
+                else:
+                    current_key = None
+
+                # Update client/key for each call
+                if provider == "Google":
+                    genai.configure(api_key=current_key)
+                elif provider in ["MegaLLM", "Open Router", "POE", "Mistral"]:
+                    try:
+                        base_url = provider_config.get("base_url")
+                        if not base_url and provider == "MegaLLM":
+                            base_url = MEGALLM_BASE_URL
+                        default_headers = provider_config.get("headers")
+                        openai_client = OpenAI(
+                            base_url=base_url,
+                            api_key=current_key,
+                            default_headers=default_headers
+                        )
+                    except Exception as client_error:
+                        self.show_error(f"Không thể khởi tạo {provider} client: {client_error}")
+                        self.processing = False
+                        self.root.after(0, lambda: self.submit_button.configure(state='normal'))
+                        self.root.after(0, lambda: self.stop_button.configure(state='disabled'))
+                        return
+
                 # Xây dựng prompt cho từng chương
                 prompt_content = self.build_translation_prompt(chapter, prev_summary)
 
-                # Hiển thị full prompt gửi API để debug
+                # Hiển thị full prompt gửi API để debug, kèm thông tin key
                 self.queue.put((self.progress_text,
                     f"Đang xử lý phần {i}/{total_parts}\n"
                     f"Model chính: {primary_model_name}\n"
+                    f"Đang dùng API KEY thứ {api_key_index+1}/{api_key_count}\n"
                     f"Prompt gửi API:\n{'='*20}\n{prompt_content}\n{'='*20}", True))
                 self.queue.put((self.result_text, f"--- Đang chờ kết quả phần {i} ---", True))
 
@@ -787,6 +860,9 @@ class GeminiInterface:
                 prev_summary = summary
                 self.prev_summary_text.delete("1.0", tk.END)
                 self.prev_summary_text.insert("1.0", summary)
+
+                # Advance round robin index for next call
+                api_key_index = self.api_key_index
 
             # Sau khi hoàn thành, lưu file tổng hợp chỉ bản dịch
             result_file_no_summary = result_file.replace('.txt', '_no_summary.txt')
