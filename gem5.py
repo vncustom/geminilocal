@@ -16,6 +16,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import inch
 
 
+
 # --- Hằng số mới ---
 GOOGLE_FALLBACK_MODEL = "gemini-2.5-flash-lite"
 API_TIMEOUT_SECONDS = 7 * 60 # 7 phút
@@ -152,6 +153,9 @@ class GeminiInterface:
         self.processing = False
         self.should_stop = False
         self.queue = queue.Queue()
+        self.api_key = None  # Single API key (legacy)
+        self.api_keys = []   # List of API keys for round robin
+        self.api_key_index = 0  # Current index for round robin
         self.api_key = None  # Single API key (legacy)
         self.api_keys = []   # List of API keys for round robin
         self.api_key_index = 0  # Current index for round robin
