@@ -140,6 +140,9 @@ PROVIDER_CONFIG = {
 }
 # --- Kết thúc hằng số mới ---
 
+MODE_WITH_CONTEXT = "With previous context"
+MODE_WITHOUT_CONTEXT = "Without previous context"
+
 class GeminiInterface:
     def __init__(self, root):
         self.root = root
@@ -376,6 +379,24 @@ class GeminiInterface:
                                           mode="determinate")
         self.progress_bar.pack(fill="x", pady=5)
 
+        mode_frame = ttk.LabelFrame(main_container, text="Chọn phiên bản", padding="5")
+        mode_frame.pack(fill="x", pady=5)
+        self.context_mode = tk.StringVar(value=MODE_WITH_CONTEXT)
+        ttk.Radiobutton(
+            mode_frame,
+            text="1. With previous context",
+            variable=self.context_mode,
+            value=MODE_WITH_CONTEXT,
+            command=self.on_context_mode_change
+        ).pack(anchor="w")
+        ttk.Radiobutton(
+            mode_frame,
+            text="2. Without previous context",
+            variable=self.context_mode,
+            value=MODE_WITHOUT_CONTEXT,
+            command=self.on_context_mode_change
+        ).pack(anchor="w")
+
         # Prompt input + context input
         prompt_context_frame = ttk.Frame(main_container)
         prompt_context_frame.pack(fill="x", pady=5)
@@ -388,6 +409,7 @@ class GeminiInterface:
         context_frame.pack(side="left", fill="both", expand=True, padx=5)
         self.prev_summary_text = self.create_text_widget(context_frame, height=4)
         self.prev_summary_text.insert("1.0", "")
+        self.on_context_mode_change()
 
         # Additional text input
         additional_frame = ttk.LabelFrame(main_container,
@@ -429,11 +451,13 @@ class GeminiInterface:
     def build_translation_prompt(self, chapter_text, prev_summary):
         prompt = self.prompt_text.get("1.0", tk.END).strip()
         context = prev_summary.strip()
+        use_context = self.context_mode.get() == MODE_WITH_CONTEXT
         prompt_parts = [prompt]
-        if context:
+        if use_context and context:
             prompt_parts.append(f"\nBối cảnh chương trước: {context}")
         prompt_parts.append("\nNội dung cần dịch:\n" + chapter_text)
-        prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 350 từ, giữ nguyên đại từ nhân xưng được sử dụng trong văn bản dịch. Tuyệt đối không ghép đại từ trước tên riêng (ví dụ: chỉ viết 'Yến Dịch', không được viết 'anh Yến Dịch') Giữ đúng đại từ khi dẫn truyện. \nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
+        if use_context:
+            prompt_parts.append("\nYêu cầu:\n1. Trả về bản dịch tiếng Việt của chương trên, không dùng Markdown.\n2. Trả về tóm tắt nội dung chương vừa dịch, tối đa 350 từ, giữ nguyên đại từ nhân xưng được sử dụng trong văn bản dịch. Tuyệt đối không ghép đại từ trước tên riêng (ví dụ: chỉ viết 'Yến Dịch', không được viết 'anh Yến Dịch') Giữ đúng đại từ khi dẫn truyện. \nTrả kết quả theo đúng thứ tự:\n---DỊCH---\n[Bản dịch]\n---TÓM TẮT---\n[Tóm tắt chương]")
         return "\n".join(prompt_parts)
 
     def extract_translation_and_summary(self, response_text):
@@ -446,6 +470,11 @@ class GeminiInterface:
             translation = response_text.strip()
             summary = ""
         return translation, summary
+
+    def on_context_mode_change(self):
+        use_context = self.context_mode.get() == MODE_WITH_CONTEXT
+        state = "normal" if use_context else "disabled"
+        self.prev_summary_text.configure(state=state)
 
     def on_language_change(self, event):
         """Update label when language changes."""
@@ -768,7 +797,8 @@ class GeminiInterface:
 
             status_messages = []
             total_parts = len(chapters)
-            prev_summary = self.prev_summary_text.get("1.0", tk.END).strip()
+            use_context = self.context_mode.get() == MODE_WITH_CONTEXT
+            prev_summary = self.prev_summary_text.get("1.0", tk.END).strip() if use_context else ""
 
             translations_only = []
             for i, chapter in enumerate(chapters, 1):
@@ -843,27 +873,35 @@ class GeminiInterface:
                     self.queue.put((self.completion_text, "\n".join(status_messages) + f"\nKết quả đang lưu tại: {result_file}", True))
                     continue
 
-                # Tách bản dịch và tóm tắt
-                translation, summary = self.extract_translation_and_summary(response_text)
+                # Tách bản dịch và tóm tắt theo mode đã chọn
+                if use_context:
+                    translation, summary = self.extract_translation_and_summary(response_text)
+                else:
+                    translation, summary = response_text.strip(), ""
                 translations_only.append(translation)
-                self.queue.put((self.result_text, f"Kết quả xử lý phần {i}:\n{translation}\n\n---TÓM TẮT---\n{summary}", True))
+                if use_context:
+                    self.queue.put((self.result_text, f"Kết quả xử lý phần {i}:\n{translation}\n\n---TÓM TẮT---\n{summary}", True))
+                else:
+                    self.queue.put((self.result_text, f"Kết quả xử lý phần {i}:\n{translation}", True))
                 status_messages.append(f"Phần {i}/{total_parts}: Hoàn thành.")
                 # Ghi kết quả vào file
                 try:
                     with open(result_file, 'a', encoding='utf-8') as f:
                         f.write(f"## ")
                         f.write(translation + "\n\n")
-                        f.write(f"## TÓM TẮT PHẦN {i} ##\n")
-                        f.write(summary + "\n\n")
+                        if use_context:
+                            f.write(f"## TÓM TẮT PHẦN {i} ##\n")
+                            f.write(summary + "\n\n")
                 except Exception as write_err:
                     print(f"Không thể ghi kết quả phần {i} vào file: {write_err}")
                     status_messages[-1] = f"Phần {i}/{total_parts}: Hoàn thành (Lỗi ghi file)"
                 self.progress_bar["value"] = i
                 self.queue.put((self.completion_text, "\n".join(status_messages) + f"\nKết quả đang lưu tại: {result_file}", True))
-                # Cập nhật tóm tắt cho chương sau
-                prev_summary = summary
-                self.prev_summary_text.delete("1.0", tk.END)
-                self.prev_summary_text.insert("1.0", summary)
+                # Cập nhật tóm tắt cho chương sau chỉ khi dùng context
+                if use_context:
+                    prev_summary = summary
+                    self.prev_summary_text.delete("1.0", tk.END)
+                    self.prev_summary_text.insert("1.0", summary)
 
                 # Advance round robin index for next call
                 api_key_index = self.api_key_index
