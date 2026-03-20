@@ -25,6 +25,7 @@ MEGALLM_BASE_URL = "https://ai.megallm.io/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 POE_BASE_URL = "https://api.poe.com/v1"
 MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
+NINEROUTER_BASE_URL = "http://localhost:20128/v1"
 LITEROUTER_BASE_URL = "https://api.literouter.com/v1"
 OPENROUTER_HEADERS = {
     "HTTP-Referer": "https://localhost",
@@ -104,6 +105,17 @@ MISTRAL_MODELS = [
     "mistral-large-2512",
     "mistral-small-2409"
 ]
+NINEROUTER_MODELS = [
+    "if/qwen3-coder-plus",
+    "if/deepseek-r1",
+    "if/kimi-k2-thinking",
+    "kr/claude-sonnet-4.5",
+    "kr/claude-haiku-4.5",
+    "kr/deepseek-3.2",
+    "kr/deepseek-3.1",
+    "gc/gemini-3-flash-preview",
+    "gc/gemini-3-pro-preview"
+]
 LITEROUTER_MODELS = [
     "deepseek-free",
     "deepseek-v3-0324-free",
@@ -120,6 +132,7 @@ PROVIDER_DEFAULT_MODELS = {
     "Open Router": "deepseek/deepseek-chat-v3.1:free",
     "POE": "gemini-2.5-pro",
     "Mistral": "mistral-small-2409",
+    "9router": "if/qwen3-coder-plus",
     "Literouter": "deepseek-free"
 }
 PROVIDER_CONFIG = {
@@ -148,6 +161,11 @@ PROVIDER_CONFIG = {
         "models": MISTRAL_MODELS,
         "fallback_model": None,
         "base_url": MISTRAL_BASE_URL
+    },
+    "9router": {
+        "models": NINEROUTER_MODELS,
+        "fallback_model": None,
+        "base_url": NINEROUTER_BASE_URL
     },
     "Literouter": {
         "models": LITEROUTER_MODELS,
@@ -640,7 +658,7 @@ class GeminiInterface:
                 if not response or not response.text:
                     return None, f"Không nhận được nội dung hợp lệ từ model {model_name}"
                 return response.text, None
-            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "Literouter"]:
+            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "9router", "Literouter"]:
                 if openai_client is None:
                     return None, f"{provider} client chưa được khởi tạo."
                 response = openai_client.chat.completions.create(
@@ -765,7 +783,7 @@ class GeminiInterface:
             api_key_index = self.api_key_index if api_key_count > 0 else 0
             if provider == "Google":
                 genai.configure(api_key=api_keys[api_key_index] if api_key_count > 0 else None)
-            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "Literouter"]:
+            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "9router", "Literouter"]:
                 try:
                     base_url = provider_config.get("base_url")
                     if not base_url and provider == "MegaLLM":
@@ -835,7 +853,7 @@ class GeminiInterface:
                 # Update client/key for each call
                 if provider == "Google":
                     genai.configure(api_key=current_key)
-                elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "Literouter"]:
+                elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "9router", "Literouter"]:
                     try:
                         base_url = provider_config.get("base_url")
                         if not base_url and provider == "MegaLLM":
