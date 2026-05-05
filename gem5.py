@@ -43,6 +43,7 @@ GOOGLE_MODELS = [
     "gemini-2.0-flash-lite",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
+    "gemini-3.1-flash-lite-preview",
     "gemini-2.5-flash-lite"
 ]
 MEGALLM_MODELS = [
@@ -465,6 +466,15 @@ class GeminiInterface:
         self.load_button = ttk.Button(button_frame, text="Tải kết quả mới nhất", # Sửa label
                                     command=self.load_results)
         self.load_button.pack(side=tk.LEFT, padx=5)
+
+        # Delay checkbox + textbox
+        self.delay_var = tk.BooleanVar(value=False)
+        self.delay_check = ttk.Checkbutton(button_frame, text="Delay (giây):",
+                                           variable=self.delay_var)
+        self.delay_check.pack(side=tk.LEFT, padx=(10, 2))
+        self.delay_entry = ttk.Entry(button_frame, font=('Arial', 12), width=5)
+        self.delay_entry.insert(0, "4")
+        self.delay_entry.pack(side=tk.LEFT, padx=(0, 5))
 
         # Progress display
         progress_frame = ttk.LabelFrame(main_container, text="Tiến trình xử lý hiện tại",
@@ -940,6 +950,16 @@ class GeminiInterface:
 
                 # Advance round robin index for next call
                 api_key_index = self.api_key_index
+
+                # Delay giữa các lần gọi API (nếu được bật và chưa phải phần cuối)
+                if self.delay_var.get() and i < total_parts and not self.should_stop:
+                    try:
+                        delay_seconds = float(self.delay_entry.get())
+                        if delay_seconds > 0:
+                            self.queue.put((self.progress_text, f"\nDelay {delay_seconds:.1f}s trước phần tiếp theo...", False))
+                            time.sleep(delay_seconds)
+                    except ValueError:
+                        pass  # Bỏ qua nếu giá trị không hợp lệ
 
             # Sau khi hoàn thành, lưu file tổng hợp chỉ bản dịch
             result_file_no_summary = result_file.replace('.txt', '_no_summary.txt')
