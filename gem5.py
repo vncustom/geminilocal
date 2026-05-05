@@ -76,10 +76,14 @@ OPENROUTER_MODELS = [
     "meituan/longcat-flash-chat:free",
     "moonshotai/kimi-k2:free",
     "z-ai/glm-4.5-air:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
     "qwen/qwen2.5-vl-72b-instruct:free",
     "qwen/qwen3-30b-a3b:free",
     "qwen/qwen3-235b-a22b:free",
+    "google/gemma-3-27b-it:free",
     "google/gemini-2.0-flash-exp:free",
+    "openrouter/free",
     "meta-llama/llama-3.3-70b-instruct:free"
 ]
 # POE models
