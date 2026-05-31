@@ -36,17 +36,18 @@ GOOGLE_MODELS = [
     "gemini-2.5-pro-preview-05-06",
     "gemini-3-flash-preview",
     "gemini-2.5-pro-exp-03-25",
-    "gemini-2.0-flash",
+    "gemini-3.5-flash",
     "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
-    "gemini-2.0-flash-lite",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
     "gemini-3.1-flash-lite-preview",
     "gemma-3-27b-it",
+    "gemma-4-26b-a4b-it",
     "gemma-4-31b-it",
-    "gemma-4-26b-a4b-it",    
+    "gemini-pro-latest",
+    "gemini-3.1-flash-lite",
     "gemini-2.5-flash-lite"
 ]
 MEGALLM_MODELS = [
@@ -384,22 +385,11 @@ class GeminiInterface:
         # Model selection (row layout, fixed width)
         model_frame = ttk.LabelFrame(main_container, text="Chọn model chính", padding="5")
         model_frame.pack(fill="x", pady=5)
-        
-        self.model_input_type = tk.StringVar(value="dropdown")
-
-        model_radio_frame = ttk.Frame(model_frame)
-        model_radio_frame.pack(fill="x", pady=(0, 5))
-        ttk.Radiobutton(model_radio_frame, text="Từ danh sách", variable=self.model_input_type, value="dropdown", command=self.on_model_input_type_change).pack(side="left", padx=(0, 10))
-        ttk.Radiobutton(model_radio_frame, text="Nhập thủ công", variable=self.model_input_type, value="manual", command=self.on_model_input_type_change).pack(side="left")
-
-        self.model_input_frame = ttk.Frame(model_frame)
-        self.model_input_frame.pack(fill="x")
-        
-        self.model = ttk.Combobox(self.model_input_frame, values=[], font=('Arial', 12), state="readonly", width=22)
+        model_row = ttk.Frame(model_frame)
+        model_row.pack(fill="x")
+        self.model = ttk.Combobox(model_row, values=[], font=('Arial', 12), state="readonly", width=22)
         self.update_model_options(self.provider_var.get())
         self.model.pack(side="left", padx=(0, 5))
-        
-        self.manual_model = ttk.Entry(self.model_input_frame, font=('Arial', 12), width=24)
 
         # API Key Frame (row layout, fixed width)
         api_frame = ttk.LabelFrame(main_container, text="API Key", padding="5")
@@ -548,14 +538,6 @@ class GeminiInterface:
             self.split_length_label.config(text="Số ký tự mỗi phần:")
         else:
             self.split_length_label.config(text="Số ký tự/số từ mỗi phần:")
-
-    def on_model_input_type_change(self):
-        if self.model_input_type.get() == "dropdown":
-            self.manual_model.pack_forget()
-            self.model.pack(side="left", padx=(0, 5))
-        else:
-            self.model.pack_forget()
-            self.manual_model.pack(side="left", padx=(0, 5))
 
     def on_provider_change(self, event):
         """Refresh model list when provider changes."""
@@ -842,17 +824,7 @@ class GeminiInterface:
                 self.root.after(0, lambda: self.submit_button.configure(state='normal'))
                 self.root.after(0, lambda: self.stop_button.configure(state='disabled'))
                 return
-
-            if self.model_input_type.get() == "dropdown":
-                primary_model_name = self.model.get()
-            else:
-                primary_model_name = self.manual_model.get().strip()
-                if not primary_model_name:
-                    self.show_error("Vui lòng nhập tên model thủ công.")
-                    self.processing = False
-                    self.root.after(0, lambda: self.submit_button.configure(state='normal'))
-                    self.root.after(0, lambda: self.stop_button.configure(state='disabled'))
-                    return
+            primary_model_name = self.model.get()
 
             text = self.additional_text.get("1.0", tk.END).strip()
             split_method = self.split_method.get()
