@@ -43,6 +43,10 @@ GOOGLE_MODELS = [
     "gemini-2.0-flash-lite",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
+    "gemini-3.1-flash-lite-preview",
+    "gemma-3-27b-it",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it",    
     "gemini-2.5-flash-lite"
 ]
 MEGALLM_MODELS = [
@@ -75,10 +79,14 @@ OPENROUTER_MODELS = [
     "meituan/longcat-flash-chat:free",
     "moonshotai/kimi-k2:free",
     "z-ai/glm-4.5-air:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
     "qwen/qwen2.5-vl-72b-instruct:free",
     "qwen/qwen3-30b-a3b:free",
     "qwen/qwen3-235b-a22b:free",
+    "google/gemma-3-27b-it:free",
     "google/gemini-2.0-flash-exp:free",
+    "openrouter/free",
     "meta-llama/llama-3.3-70b-instruct:free"
 ]
 # POE models
@@ -376,11 +384,22 @@ class GeminiInterface:
         # Model selection (row layout, fixed width)
         model_frame = ttk.LabelFrame(main_container, text="Chọn model chính", padding="5")
         model_frame.pack(fill="x", pady=5)
-        model_row = ttk.Frame(model_frame)
-        model_row.pack(fill="x")
-        self.model = ttk.Combobox(model_row, values=[], font=('Arial', 12), state="readonly", width=22)
+        
+        self.model_input_type = tk.StringVar(value="dropdown")
+
+        model_radio_frame = ttk.Frame(model_frame)
+        model_radio_frame.pack(fill="x", pady=(0, 5))
+        ttk.Radiobutton(model_radio_frame, text="Từ danh sách", variable=self.model_input_type, value="dropdown", command=self.on_model_input_type_change).pack(side="left", padx=(0, 10))
+        ttk.Radiobutton(model_radio_frame, text="Nhập thủ công", variable=self.model_input_type, value="manual", command=self.on_model_input_type_change).pack(side="left")
+
+        self.model_input_frame = ttk.Frame(model_frame)
+        self.model_input_frame.pack(fill="x")
+        
+        self.model = ttk.Combobox(self.model_input_frame, values=[], font=('Arial', 12), state="readonly", width=22)
         self.update_model_options(self.provider_var.get())
         self.model.pack(side="left", padx=(0, 5))
+        
+        self.manual_model = ttk.Entry(self.model_input_frame, font=('Arial', 12), width=24)
 
         # API Key Frame (row layout, fixed width)
         api_frame = ttk.LabelFrame(main_container, text="API Key", padding="5")
@@ -466,6 +485,15 @@ class GeminiInterface:
                                     command=self.load_results)
         self.load_button.pack(side=tk.LEFT, padx=5)
 
+        # Delay checkbox + textbox
+        self.delay_var = tk.BooleanVar(value=False)
+        self.delay_check = ttk.Checkbutton(button_frame, text="Delay (giây):",
+                                           variable=self.delay_var)
+        self.delay_check.pack(side=tk.LEFT, padx=(10, 2))
+        self.delay_entry = ttk.Entry(button_frame, font=('Arial', 12), width=5)
+        self.delay_entry.insert(0, "4")
+        self.delay_entry.pack(side=tk.LEFT, padx=(0, 5))
+
         # Progress display
         progress_frame = ttk.LabelFrame(main_container, text="Tiến trình xử lý hiện tại",
                                       padding="5")
@@ -520,6 +548,14 @@ class GeminiInterface:
             self.split_length_label.config(text="Số ký tự mỗi phần:")
         else:
             self.split_length_label.config(text="Số ký tự/số từ mỗi phần:")
+
+    def on_model_input_type_change(self):
+        if self.model_input_type.get() == "dropdown":
+            self.manual_model.pack_forget()
+            self.model.pack(side="left", padx=(0, 5))
+        else:
+            self.model.pack_forget()
+            self.manual_model.pack(side="left", padx=(0, 5))
 
     def on_provider_change(self, event):
         """Refresh model list when provider changes."""
@@ -806,7 +842,17 @@ class GeminiInterface:
                 self.root.after(0, lambda: self.submit_button.configure(state='normal'))
                 self.root.after(0, lambda: self.stop_button.configure(state='disabled'))
                 return
-            primary_model_name = self.model.get()
+
+            if self.model_input_type.get() == "dropdown":
+                primary_model_name = self.model.get()
+            else:
+                primary_model_name = self.manual_model.get().strip()
+                if not primary_model_name:
+                    self.show_error("Vui lòng nhập tên model thủ công.")
+                    self.processing = False
+                    self.root.after(0, lambda: self.submit_button.configure(state='normal'))
+                    self.root.after(0, lambda: self.stop_button.configure(state='disabled'))
+                    return
 
             text = self.additional_text.get("1.0", tk.END).strip()
             split_method = self.split_method.get()
@@ -940,6 +986,16 @@ class GeminiInterface:
 
                 # Advance round robin index for next call
                 api_key_index = self.api_key_index
+
+                # Delay giữa các lần gọi API (nếu được bật và chưa phải phần cuối)
+                if self.delay_var.get() and i < total_parts and not self.should_stop:
+                    try:
+                        delay_seconds = float(self.delay_entry.get())
+                        if delay_seconds > 0:
+                            self.queue.put((self.progress_text, f"\nDelay {delay_seconds:.1f}s trước phần tiếp theo...", False))
+                            time.sleep(delay_seconds)
+                    except ValueError:
+                        pass  # Bỏ qua nếu giá trị không hợp lệ
 
             # Sau khi hoàn thành, lưu file tổng hợp chỉ bản dịch
             result_file_no_summary = result_file.replace('.txt', '_no_summary.txt')
