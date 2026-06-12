@@ -134,6 +134,7 @@ LITEROUTER_MODELS = [
     "kimi-k2-thinking-free",
     "qwen-free"
 ]
+OPENAI_COMPAT_DEFAULT_MODEL = "gpt-oss-120b"
 PROVIDER_DEFAULT_MODELS = {
     "Google": "gemini-flash-latest",
     "MegaLLM": "gpt-5.1",
@@ -141,7 +142,8 @@ PROVIDER_DEFAULT_MODELS = {
     "POE": "gemini-2.5-pro",
     "Mistral": "mistral-small-2409",
     "9router": "if/qwen3-coder-plus",
-    "Literouter": "deepseek-free"
+    "Literouter": "deepseek-free",
+    "OpenAI-compatible": OPENAI_COMPAT_DEFAULT_MODEL
 }
 PROVIDER_CONFIG = {
     "Google": {
@@ -179,6 +181,11 @@ PROVIDER_CONFIG = {
         "models": LITEROUTER_MODELS,
         "fallback_model": None,
         "base_url": LITEROUTER_BASE_URL
+    },
+    "OpenAI-compatible": {
+        "models": [],
+        "fallback_model": None,
+        "base_url": None  # Người dùng tự nhập
     }
 }
 # --- Kết thúc hằng số mới ---
@@ -376,10 +383,17 @@ class GeminiInterface:
             values=list(PROVIDER_CONFIG.keys()),
             font=('Arial', 12),
             state="readonly",
-            width=12
+            width=14
         )
         self.provider_combo.pack(side="left", padx=(0, 5))
         self.provider_combo.bind("<<ComboboxSelected>>", self.on_provider_change)
+
+        # BASE_URL frame for OpenAI-compatible provider
+        self.base_url_frame = ttk.Frame(lang_frame)
+        ttk.Label(self.base_url_frame, text="Base URL:", font=('Arial', 12)).pack(side="left", padx=(0, 5))
+        self.base_url_entry = ttk.Entry(self.base_url_frame, font=('Arial', 12), width=40)
+        self.base_url_entry.insert(0, "https://api.cerebras.ai/v1")
+        self.base_url_entry.pack(side="left", fill="x", expand=True)
 
         # Model selection (row layout, fixed width)
         model_frame = ttk.LabelFrame(main_container, text="Chọn model chính", padding="5")
@@ -559,7 +573,13 @@ class GeminiInterface:
 
     def on_provider_change(self, event):
         """Refresh model list when provider changes."""
-        self.update_model_options()
+        provider = self.provider_var.get()
+        self.update_model_options(provider)
+        # Show/hide BASE_URL frame
+        if provider == "OpenAI-compatible":
+            self.base_url_frame.pack(fill="x", pady=(5, 0))
+        else:
+            self.base_url_frame.pack_forget()
 
     def update_model_options(self, provider=None):
         """Update model combobox based on selected provider."""
@@ -568,12 +588,21 @@ class GeminiInterface:
         models = config.get("models", [])
         self.model["values"] = models
         default_model = PROVIDER_DEFAULT_MODELS.get(provider)
-        if default_model in models:
-            self.model.set(default_model)
-        elif models:
-            self.model.set(models[0])
+        if provider == "OpenAI-compatible":
+            # Chuyển sang nhập thủ công, điền sẵn default model
+            self.model_input_type.set("manual")
+            self.model.pack_forget()
+            self.manual_model.pack(side="left", padx=(0, 5))
+            if not self.manual_model.get().strip():
+                self.manual_model.delete(0, tk.END)
+                self.manual_model.insert(0, OPENAI_COMPAT_DEFAULT_MODEL)
         else:
-            self.model.set("")
+            if default_model in models:
+                self.model.set(default_model)
+            elif models:
+                self.model.set(models[0])
+            else:
+                self.model.set("")
 
     def setup_periodic_queue_check(self):
         def check_queue():
@@ -694,7 +723,7 @@ class GeminiInterface:
                 if not response or not response.text:
                     return None, f"Không nhận được nội dung hợp lệ từ model {model_name}"
                 return response.text, None
-            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "9router", "Literouter"]:
+            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "9router", "Literouter", "OpenAI-compatible"]:
                 if openai_client is None:
                     return None, f"{provider} client chưa được khởi tạo."
                 response = openai_client.chat.completions.create(
@@ -819,12 +848,22 @@ class GeminiInterface:
             api_key_index = self.api_key_index if api_key_count > 0 else 0
             if provider == "Google":
                 genai.configure(api_key=api_keys[api_key_index] if api_key_count > 0 else None)
-            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "9router", "Literouter"]:
+            elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "9router", "Literouter", "OpenAI-compatible"]:
                 try:
-                    base_url = provider_config.get("base_url")
-                    if not base_url and provider == "MegaLLM":
-                        base_url = MEGALLM_BASE_URL
-                    default_headers = provider_config.get("headers")
+                    if provider == "OpenAI-compatible":
+                        base_url = self.base_url_entry.get().strip()
+                        if not base_url:
+                            self.show_error("Vui lòng nhập Base URL cho OpenAI-compatible provider.")
+                            self.processing = False
+                            self.root.after(0, lambda: self.submit_button.configure(state='normal'))
+                            self.root.after(0, lambda: self.stop_button.configure(state='disabled'))
+                            return
+                        default_headers = None
+                    else:
+                        base_url = provider_config.get("base_url")
+                        if not base_url and provider == "MegaLLM":
+                            base_url = MEGALLM_BASE_URL
+                        default_headers = provider_config.get("headers")
                     openai_client = OpenAI(
                         base_url=base_url,
                         api_key=api_keys[api_key_index] if api_key_count > 0 else None,
@@ -899,12 +938,16 @@ class GeminiInterface:
                 # Update client/key for each call
                 if provider == "Google":
                     genai.configure(api_key=current_key)
-                elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "9router", "Literouter"]:
+                elif provider in ["MegaLLM", "Open Router", "POE", "Mistral", "9router", "Literouter", "OpenAI-compatible"]:
                     try:
-                        base_url = provider_config.get("base_url")
-                        if not base_url and provider == "MegaLLM":
-                            base_url = MEGALLM_BASE_URL
-                        default_headers = provider_config.get("headers")
+                        if provider == "OpenAI-compatible":
+                            base_url = self.base_url_entry.get().strip()
+                            default_headers = None
+                        else:
+                            base_url = provider_config.get("base_url")
+                            if not base_url and provider == "MegaLLM":
+                                base_url = MEGALLM_BASE_URL
+                            default_headers = provider_config.get("headers")
                         openai_client = OpenAI(
                             base_url=base_url,
                             api_key=current_key,
